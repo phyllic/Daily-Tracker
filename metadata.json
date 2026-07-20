@@ -1,0 +1,6 @@
+{
+  "name": "Daily Workout Tracker",
+  "description": "An offline-capable, highly customizable daily workout tracker with progress charts and custom routines.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
