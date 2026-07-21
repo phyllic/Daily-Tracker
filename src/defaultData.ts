@@ -3,6 +3,7 @@ import { WorkoutType, WorkoutLog, UserPreferences } from './types';
 export const DEFAULT_PREFERENCES: UserPreferences = {
   defaultDurationMinutes: 30,
   soundEnabled: true,
+  weightUnit: 'kg',
 };
 
 export const getMockHistory = (): WorkoutLog[] => {

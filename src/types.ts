@@ -12,7 +12,15 @@ export interface WorkoutLog {
   notes?: string;
 }
 
+export interface WeightEntry {
+  id: string;
+  date: string; // YYYY-MM-DD local date
+  weight: number; // kg or lbs depending on user unit preference
+  notes?: string;
+}
+
 export interface UserPreferences {
   defaultDurationMinutes: number; // e.g., 30
   soundEnabled: boolean;
+  weightUnit: 'kg' | 'lbs';
 }

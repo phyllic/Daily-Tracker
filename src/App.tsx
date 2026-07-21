@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 
 // Import Types and Data
-import { WorkoutLog, WorkoutType, UserPreferences } from './types';
+import { WorkoutLog, WorkoutType, UserPreferences, WeightEntry } from './types';
 import { DEFAULT_PREFERENCES, getMockHistory } from './defaultData';
 
 // Import Custom Modular Components
@@ -17,6 +17,7 @@ import { CalendarView } from './components/CalendarView';
 import { ActiveTimer } from './components/ActiveTimer';
 import { QuickLog } from './components/QuickLog';
 import { HistoryList } from './components/HistoryList';
+import { WeightTracker } from './components/WeightTracker';
 
 export default function App() {
   // Navigation Tabs
@@ -27,6 +28,7 @@ export default function App() {
 
   // Database States
   const [history, setHistory] = useState<WorkoutLog[]>([]);
+  const [weights, setWeights] = useState<WeightEntry[]>([]);
   const [preferences, setPreferences] = useState<UserPreferences>(DEFAULT_PREFERENCES);
 
   // Selected date from calendar to quick-log
@@ -61,12 +63,27 @@ export default function App() {
       setHistory(mockHist);
       localStorage.setItem('workout_history', JSON.stringify(mockHist));
     }
+
+    // 3. Weights
+    const savedWeights = localStorage.getItem('workout_weights');
+    if (savedWeights) {
+      try {
+        setWeights(JSON.parse(savedWeights));
+      } catch (e) {
+        console.error("Failed loading weights", e);
+      }
+    }
   }, []);
 
   // Synchronizers
   const updateHistory = (newHistory: WorkoutLog[]) => {
     setHistory(newHistory);
     localStorage.setItem('workout_history', JSON.stringify(newHistory));
+  };
+
+  const updateWeights = (newWeights: WeightEntry[]) => {
+    setWeights(newWeights);
+    localStorage.setItem('workout_weights', JSON.stringify(newWeights));
   };
 
   const updatePreferences = (newPrefs: UserPreferences) => {
@@ -96,6 +113,26 @@ export default function App() {
     updateHistory(updated);
   };
 
+  // Log a new weight entry
+  const handleLogWeight = (entry: Omit<WeightEntry, 'id'>) => {
+    const newEntry: WeightEntry = {
+      ...entry,
+      id: `weight-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    };
+    const updated = [newEntry, ...weights];
+    // Keep only one entry per date (latest wins)
+    const byDate = new Map<string, WeightEntry>();
+    updated.forEach(e => byDate.set(e.date, e));
+    const deduped = Array.from(byDate.values()).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    updateWeights(deduped);
+  };
+
+  // Delete a weight entry
+  const handleDeleteWeight = (id: string) => {
+    const updated = weights.filter(item => item.id !== id);
+    updateWeights(updated);
+  };
+
   // Calendar bridge: When a user clicks empty calendar slot, switch to quick manual log and fill date
   const handleSelectDateToLog = (date: Date) => {
     setSelectedDateForLog(date);
@@ -114,8 +151,9 @@ export default function App() {
 
   // Reset entire database
   const handleClearAllData = () => {
-    if (window.confirm("Are you sure you want to clear your entire workout history? This action cannot be undone.")) {
+    if (window.confirm("Are you sure you want to clear your entire workout history and weight data? This action cannot be undone.")) {
       updateHistory([]);
+      updateWeights([]);
       updatePreferences(DEFAULT_PREFERENCES);
     }
   };
@@ -132,8 +170,9 @@ export default function App() {
   // Client-side JSON backup download
   const handleExportJSON = () => {
     const data = {
-      version: 'workout-tracker-v1',
+      version: 'workout-tracker-v2',
       history,
+      weights,
       preferences,
       exportedAt: Date.now()
     };
@@ -159,6 +198,9 @@ export default function App() {
         const parsed = JSON.parse(event.target?.result as string);
         if (parsed && Array.isArray(parsed.history)) {
           updateHistory(parsed.history);
+          if (Array.isArray(parsed.weights)) {
+            updateWeights(parsed.weights);
+          }
           if (parsed.preferences) {
             updatePreferences(parsed.preferences);
           }
@@ -267,7 +309,14 @@ export default function App() {
                 
                 {/* Stats Dashboard (consecutive streak, distribution counts, weekly boxes) */}
                 <div className="lg:col-span-7 space-y-6">
-                  <StatsDashboard logs={history} />
+                  <StatsDashboard logs={history} weights={weights} />
+                  <WeightTracker
+                    weights={weights}
+                    preferences={preferences}
+                    onLogWeight={handleLogWeight}
+                    onDeleteWeight={handleDeleteWeight}
+                    onUpdateUnit={(unit) => updatePreferences({ ...preferences, weightUnit: unit })}
+                  />
                 </div>
 
                 {/* Tracking Action Area */}
@@ -408,6 +457,27 @@ export default function App() {
                         className="w-16 text-center text-xs font-bold bg-white border border-gray-200 rounded-lg py-1.5 focus:outline-none focus:ring-1 focus:ring-emerald-400"
                       />
                       <span className="text-xs font-semibold text-gray-400">min</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3.5 bg-gray-50 rounded-xl border border-gray-100">
+                    <div className="space-y-0.5">
+                      <span className="text-xs font-bold text-gray-700">Weight Unit</span>
+                      <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Display weights in kilograms or pounds</p>
+                    </div>
+                    <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-gray-200">
+                      <button
+                        onClick={() => updatePreferences({ ...preferences, weightUnit: 'kg' })}
+                        className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${preferences.weightUnit === 'kg' ? 'bg-emerald-50 text-emerald-700' : 'text-gray-400'}`}
+                      >
+                        KG
+                      </button>
+                      <button
+                        onClick={() => updatePreferences({ ...preferences, weightUnit: 'lbs' })}
+                        className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${preferences.weightUnit === 'lbs' ? 'bg-emerald-50 text-emerald-700' : 'text-gray-400'}`}
+                      >
+                        LBS
+                      </button>
                     </div>
                   </div>
                 </div>

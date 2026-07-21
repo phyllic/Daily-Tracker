@@ -1,8 +1,11 @@
-const CACHE_NAME = 'workout-tracker-v1';
+const CACHE_NAME = 'workout-tracker-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
-  '/manifest.json'
+  '/manifest.json',
+  '/icon-192.png',
+  '/icon-512.png',
+  '/favicon.ico'
 ];
 
 // On install, cache the essential shells
@@ -61,5 +64,18 @@ self.addEventListener('fetch', (event) => {
           }
         });
       })
+  );
+});
+
+// Handle notification clicks
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      if (clientList.length > 0) {
+        return clientList[0].focus();
+      }
+      return clients.openWindow('/');
+    })
   );
 });

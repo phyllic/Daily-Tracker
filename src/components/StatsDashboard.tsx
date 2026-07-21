@@ -1,9 +1,14 @@
 import React from 'react';
-import { WorkoutLog, WorkoutType } from '../types';
-import { Flame, Calendar, Clock, Trophy, Dumbbell, Bike, Footprints } from 'lucide-react';
+import { WorkoutLog, WorkoutType, WeightEntry } from '../types';
+import { Flame, Clock, Trophy, Dumbbell, Bike, Footprints, Calendar } from 'lucide-react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  LineChart, Line
+} from 'recharts';
 
 interface StatsDashboardProps {
   logs: WorkoutLog[];
+  weights?: WeightEntry[];
 }
 
 export const calculateStreak = (logs: WorkoutLog[]): number => {
@@ -24,7 +29,7 @@ export const calculateStreak = (logs: WorkoutLog[]): number => {
   if (loggedDays.length === 0) return 0;
 
   const mostRecent = loggedDays[0];
-  
+
   // If the most recent log is older than yesterday, streak is 0
   if (today - mostRecent > oneDayMs) {
     return 0;
@@ -45,7 +50,7 @@ export const calculateStreak = (logs: WorkoutLog[]): number => {
   return streak;
 };
 
-export const StatsDashboard: React.FC<StatsDashboardProps> = ({ logs }) => {
+export const StatsDashboard: React.FC<StatsDashboardProps> = ({ logs, weights = [] }) => {
   const currentStreak = calculateStreak(logs);
   const totalMinutes = logs.reduce((sum, log) => sum + log.durationMinutes, 0);
   const totalWorkouts = logs.length;
@@ -77,9 +82,53 @@ export const StatsDashboard: React.FC<StatsDashboardProps> = ({ logs }) => {
     start.setHours(0, 0, 0, 0);
     const end = new Date(date);
     end.setHours(23, 59, 59, 999);
-    
+
     return logs.find(log => log.timestamp >= start.getTime() && log.timestamp <= end.getTime());
   };
+
+  const getMinutesForDay = (date: Date) => {
+    const start = new Date(date);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(date);
+    end.setHours(23, 59, 59, 999);
+    return logs
+      .filter(log => log.timestamp >= start.getTime() && log.timestamp <= end.getTime())
+      .reduce((sum, log) => sum + log.durationMinutes, 0);
+  };
+
+  const weeklyChartData = weekDays.map(day => ({
+    day: day.toLocaleDateString('en', { weekday: 'narrow' }),
+    fullDay: day.toLocaleDateString('en', { weekday: 'short' }),
+    date: day.getDate(),
+    minutes: getMinutesForDay(day)
+  }));
+
+  const last7Days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() - (6 - i));
+    d.setHours(0, 0, 0, 0);
+    return d;
+  });
+
+  const dailyMinutesData = last7Days.map(day => {
+    const start = day.getTime();
+    const end = start + 24 * 60 * 60 * 1000 - 1;
+    const minutes = logs
+      .filter(log => log.timestamp >= start && log.timestamp <= end)
+      .reduce((sum, log) => sum + log.durationMinutes, 0);
+    return {
+      date: day.toLocaleDateString('en', { month: 'short', day: 'numeric' }),
+      minutes
+    };
+  });
+
+  const weightChartData = [...weights]
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    .slice(-7)
+    .map(entry => ({
+      date: new Date(entry.date).toLocaleDateString('en', { month: 'short', day: 'numeric' }),
+      weight: entry.weight
+    }));
 
   const getTypeIcon = (type: WorkoutType) => {
     switch (type) {
@@ -91,6 +140,8 @@ export const StatsDashboard: React.FC<StatsDashboardProps> = ({ logs }) => {
         return <Bike id="icon-bike-week" className="w-4 h-4 text-indigo-600" />;
     }
   };
+
+  const recentLogs = [...logs].sort((a, b) => b.timestamp - a.timestamp).slice(0, 5);
 
   return (
     <div id="stats-dashboard" className="space-y-6">
@@ -155,16 +206,16 @@ export const StatsDashboard: React.FC<StatsDashboardProps> = ({ logs }) => {
           {weekDays.map((day, idx) => {
             const workout = getWorkoutForDay(day);
             const isToday = day.toDateString() === new Date().toDateString();
-            
+
             return (
-              <div 
-                key={idx} 
+              <div
+                key={idx}
                 id={`weekly-day-${idx}`}
                 className={`flex flex-col items-center p-3 rounded-xl border transition-all ${
-                  workout 
-                    ? 'bg-zinc-900 border-zinc-900 text-white' 
-                    : isToday 
-                    ? 'bg-white border-zinc-900 ring-1 ring-zinc-900/10 text-zinc-900' 
+                  workout
+                    ? 'bg-zinc-900 border-zinc-900 text-white'
+                    : isToday
+                    ? 'bg-white border-zinc-900 ring-1 ring-zinc-900/10 text-zinc-900'
                     : 'bg-zinc-50/50 border-zinc-100 text-zinc-400'
                 }`}
               >
@@ -191,6 +242,116 @@ export const StatsDashboard: React.FC<StatsDashboardProps> = ({ logs }) => {
         </div>
       </div>
 
+      {/* Weekly Minutes Bar Chart */}
+      <div id="card-weekly-minutes" className="bg-white p-6 rounded-2xl border border-zinc-200/60 space-y-4">
+        <div>
+          <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">Weekly Active Minutes</h3>
+          <p className="text-xs text-zinc-500">Minutes exercised each day this week</p>
+        </div>
+        <div className="h-48 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={weeklyChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" vertical={false} />
+              <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#a1a1aa' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: '#a1a1aa' }} axisLine={false} tickLine={false} />
+              <Tooltip
+                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: '12px' }}
+                formatter={(value: number) => [`${value} min`, 'Active Minutes']}
+                labelFormatter={(_, payload: any) => payload?.[0]?.payload?.fullDay || ''}
+              />
+              <Bar dataKey="minutes" fill="#18181b" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Daily Trend Line Chart */}
+      <div id="card-daily-trend" className="bg-white p-6 rounded-2xl border border-zinc-200/60 space-y-4">
+        <div>
+          <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">Daily Activity Trend</h3>
+          <p className="text-xs text-zinc-500">Last 7 days of exercise minutes</p>
+        </div>
+        <div className="h-48 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={dailyMinutesData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#a1a1aa' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: '#a1a1aa' }} axisLine={false} tickLine={false} />
+              <Tooltip
+                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: '12px' }}
+                formatter={(value: number) => [`${value} min`, 'Minutes']}
+              />
+              <Line type="monotone" dataKey="minutes" stroke="#10b981" strokeWidth={3} dot={{ r: 4, fill: '#10b981', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Weight Mini Chart */}
+      {weightChartData.length > 1 && (
+        <div id="card-weight-trend" className="bg-white p-6 rounded-2xl border border-zinc-200/60 space-y-4">
+          <div>
+            <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">Weight Trend</h3>
+            <p className="text-xs text-zinc-500">Last 7 weight entries (kg)</p>
+          </div>
+          <div className="h-48 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={weightChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#a1a1aa' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: '#a1a1aa' }} axisLine={false} tickLine={false} domain={['auto', 'auto']} />
+                <Tooltip
+                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: '12px' }}
+                  formatter={(value: number) => [`${value} kg`, 'Weight']}
+                />
+                <Line type="monotone" dataKey="weight" stroke="#6366f1" strokeWidth={3} dot={{ r: 4, fill: '#6366f1', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* Recent Activity Table */}
+      {recentLogs.length > 0 && (
+        <div id="card-recent-activity" className="bg-white p-6 rounded-2xl border border-zinc-200/60 space-y-4">
+          <div>
+            <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-wider">Recent Sessions</h3>
+            <p className="text-xs text-zinc-500">Your latest workouts at a glance</p>
+          </div>
+          <div className="overflow-hidden rounded-xl border border-zinc-100">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-zinc-50 text-zinc-400">
+                <tr>
+                  <th className="px-3 py-2 font-bold uppercase tracking-wider text-[10px]">Date</th>
+                  <th className="px-3 py-2 font-bold uppercase tracking-wider text-[10px]">Type</th>
+                  <th className="px-3 py-2 font-bold uppercase tracking-wider text-[10px]">Duration</th>
+                  <th className="px-3 py-2 font-bold uppercase tracking-wider text-[10px]">Notes</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100">
+                {recentLogs.map(log => (
+                  <tr key={log.id} className="hover:bg-zinc-50/50">
+                    <td className="px-3 py-2.5 text-zinc-700 font-medium whitespace-nowrap">
+                      {new Date(log.timestamp).toLocaleDateString()}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center gap-1.5">
+                        {getTypeIcon(log.type)}
+                        <span className="text-zinc-700 font-medium">{log.type}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5 text-zinc-900 font-bold">{log.durationMinutes} min</td>
+                    <td className="px-3 py-2.5 text-zinc-500 truncate max-w-[150px]" title={log.notes}>
+                      {log.notes || '-'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Breakdown Bar Chart */}
       <div id="card-breakdown" className="bg-white p-6 rounded-2xl border border-zinc-200/60 space-y-6">
         <div>
@@ -209,8 +370,8 @@ export const StatsDashboard: React.FC<StatsDashboardProps> = ({ logs }) => {
               <span className="text-zinc-900 font-bold">{indoorCount} sessions</span>
             </div>
             <div className="h-1.5 w-full bg-zinc-100 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-zinc-900 rounded-full transition-all duration-500" 
+              <div
+                className="h-full bg-zinc-900 rounded-full transition-all duration-500"
                 style={{ width: `${totalWorkouts > 0 ? (indoorCount / totalWorkouts) * 100 : 0}%` }}
               />
             </div>
@@ -226,8 +387,8 @@ export const StatsDashboard: React.FC<StatsDashboardProps> = ({ logs }) => {
               <span className="text-zinc-900 font-bold">{walkRunCount} sessions</span>
             </div>
             <div className="h-1.5 w-full bg-zinc-100 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-zinc-900 rounded-full transition-all duration-500" 
+              <div
+                className="h-full bg-zinc-900 rounded-full transition-all duration-500"
                 style={{ width: `${totalWorkouts > 0 ? (walkRunCount / totalWorkouts) * 100 : 0}%` }}
               />
             </div>
@@ -243,8 +404,8 @@ export const StatsDashboard: React.FC<StatsDashboardProps> = ({ logs }) => {
               <span className="text-zinc-900 font-bold">{bicycleCount} sessions</span>
             </div>
             <div className="h-1.5 w-full bg-zinc-100 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-zinc-900 rounded-full transition-all duration-500" 
+              <div
+                className="h-full bg-zinc-900 rounded-full transition-all duration-500"
                 style={{ width: `${totalWorkouts > 0 ? (bicycleCount / totalWorkouts) * 100 : 0}%` }}
               />
             </div>
